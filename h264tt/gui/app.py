@@ -3255,6 +3255,17 @@ class VideoPlayerWidget(QWidget):
         # Dividir la línea por espacios para obtener símbolos individuales
         symbols = line.split()
 
+        # FFmpeg >= 7.0 imprime, tras "New frame", una cabecera de columnas
+        # ("0  64 128 ...", solo números) y antepone a cada fila su coordenada y
+        # ("16 i  i  I ..."). FFmpeg 6.x no lo hace. Sin este filtro la etiqueta
+        # "0" se confundía con un macrobloque SKIP y toda la rejilla se desplazaba.
+        if symbols and all(s.isdigit() for s in symbols):
+            if any(s not in ("0", "1", "2") for s in symbols):
+                return None  # cabecera de columnas
+            # Solo 0/1/2: formato numérico antiguo, se conserva tal cual
+        elif symbols and symbols[0].isdigit():
+            symbols = symbols[1:]  # etiqueta de fila (coordenada y)
+
         # Verificar que la línea contenga principalmente símbolos de un solo caracter
         # Las líneas válidas de MB tienen muchos símbolos de 1-2 caracteres
         if len(symbols) < 5:  # Líneas muy cortas probablemente no son MB

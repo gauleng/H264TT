@@ -2405,7 +2405,7 @@ class VideoPlayerWidget(QWidget):
         self.zoom_title_label = QLabel(_("Zoom:"))
         zoom_layout.addWidget(self.zoom_title_label)
         self.zoom_slider = QSlider(Qt.Horizontal)
-        self.zoom_slider.setRange(10, 160)  # décimas: 1.0x a 16.0x
+        self.zoom_slider.setRange(10, 160)  # décimas; el rango real depende del ajuste
         self.zoom_slider.setValue(10)
         self.zoom_slider.setMaximumWidth(220)
         self.zoom_slider.setToolTip(
@@ -3517,6 +3517,21 @@ class VideoPlayerWidget(QWidget):
         self._view_geom = (cx, cy, scale, vw, vh)
         return cv2.resize(crop, (out_w, out_h), interpolation=interp), scale
 
+    def _zoom_limits(self):
+        """Límites del zoom relativo al ajuste. Siempre incluyen el tamaño real
+        (1:1), también cuando el ajuste ya está por encima del 100% (vídeo
+        pequeño: hace falta < 1x) o muy por debajo (vídeo grande: hace falta
+        mucho más de 16x)."""
+        fit = self._fit_scale if self._fit_scale > 0 else 1.0
+        return min(1.0, 1.0 / fit), max(16.0, 4.0 / fit)
+
+    def _update_zoom_limits(self):
+        lo, hi = self._zoom_limits()
+        self.zoom_slider.blockSignals(True)
+        self.zoom_slider.setRange(max(1, int(lo * 10)), int(hi * 10) + 1)
+        self.zoom_slider.setValue(int(round(self.zoom_rel * 10)))
+        self.zoom_slider.blockSignals(False)
+
     def _update_zoom_label(self, scale):
         self.zoom_label.setText(f"{self.zoom_rel:.1f}× ({scale * 100:.0f}%)")
 
@@ -3526,7 +3541,8 @@ class VideoPlayerWidget(QWidget):
     def set_zoom(self, zoom_rel, anchor=None):
         """Cambia el zoom (1.0 = ajustar). anchor es la posición del cursor en el área
         de vídeo: el punto del frame que hay bajo él se mantiene en su sitio."""
-        zoom_rel = max(1.0, min(16.0, float(zoom_rel)))
+        lo, hi = self._zoom_limits()
+        zoom_rel = max(lo, min(hi, float(zoom_rel)))
         geom = self._view_geom
         if anchor is not None and geom is not None and zoom_rel > 1.0:
             cx, cy, scale, vw, vh = geom
@@ -3661,7 +3677,11 @@ class VideoPlayerWidget(QWidget):
         label_size = self.video_label.size()
         fit_scale = min(label_size.width() / frame_w, label_size.height() / frame_h)
         self._fit_scale = fit_scale
-        zoomed = self.zoom_rel > 1.0 and fit_scale > 0
+        if fit_scale > 0:
+            lo, hi = self._zoom_limits()
+            self.zoom_rel = max(lo, min(hi, self.zoom_rel))
+            self._update_zoom_limits()
+        zoomed = abs(self.zoom_rel - 1.0) > 1e-9 and fit_scale > 0
         if zoomed:
             # Solo se recorta y escala la zona visible: rápido incluso con zoom alto
             frame, scale = self._render_zoomed(frame, label_size, fit_scale)

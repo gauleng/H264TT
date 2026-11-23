@@ -865,14 +865,18 @@ class MBVisualizer:
                 tokens = clean.split()
 
                 # FFmpeg >= 7.0 imprime, tras "New frame", una cabecera de
-                # columnas ("0   64 ...") y antepone a cada fila su coordenada y
-                # ("16 i  i  I ..."). FFmpeg 6.x no lo hace. Los tokens de
-                # macrobloque nunca contienen dígitos, así que ambos formatos
-                # se distinguen sin necesidad de conocer la versión.
+                # columnas ("0  64 128 ...", solo números) y antepone a cada fila
+                # su coordenada y ("16 i  i  I ..."). FFmpeg 6.x no lo hace.
+                # Misma regla que el analizador de la interfaz: una línea solo
+                # numérica con algún valor fuera de 0/1/2 es la cabecera; si solo
+                # tiene 0/1/2 es una fila del formato numérico antiguo y se
+                # conserva. Una fila con letras que empieza por un número lleva
+                # etiqueta de fila, que se descarta.
                 if tokens and all(t.isdigit() for t in tokens):
-                    continue  # cabecera de columnas
-                if tokens and tokens[0].isdigit():
-                    tokens = tokens[1:]  # etiqueta de fila
+                    if any(t not in ("0", "1", "2") for t in tokens):
+                        continue  # cabecera de columnas
+                elif tokens and tokens[0].isdigit():
+                    tokens = tokens[1:]  # etiqueta de fila (coordenada y)
                     clean = " ".join(tokens)
 
                 skip_words = [

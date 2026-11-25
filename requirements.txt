@@ -3,4 +3,5 @@ matplotlib>=3.8
 numpy>=1.26
 opencv-python-headless>=4.10
 PyQt5==5.15.11
-pyqt5-qt5==5.15.2
+pyqt5-qt5==5.15.11; sys_platform == 'darwin' and platform_machine == 'arm64'
+pyqt5-qt5==5.15.2; sys_platform != 'darwin' or platform_machine != 'arm64'

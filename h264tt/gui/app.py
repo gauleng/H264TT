@@ -2304,6 +2304,7 @@ class VideoPlayerWidget(QWidget):
         self._view_geom = None
         self._fit_scale = 1.0
         self._pan_last = None
+        self._zoom_actual = False  # modo 1:1: se mantiene al redimensionar
 
         # Timer para reproducción
         self.timer = QTimer(self)
@@ -3541,6 +3542,7 @@ class VideoPlayerWidget(QWidget):
     def set_zoom(self, zoom_rel, anchor=None):
         """Cambia el zoom (1.0 = ajustar). anchor es la posición del cursor en el área
         de vídeo: el punto del frame que hay bajo él se mantiene en su sitio."""
+        self._zoom_actual = False  # cualquier otro zoom sale del modo 1:1
         lo, hi = self._zoom_limits()
         zoom_rel = max(lo, min(hi, float(zoom_rel)))
         geom = self._view_geom
@@ -3574,9 +3576,11 @@ class VideoPlayerWidget(QWidget):
         """Tamaño real: un píxel de vídeo por píxel de pantalla."""
         if self.cap and self._fit_scale > 0:
             self.set_zoom(1.0 / self._fit_scale)
+            self._zoom_actual = True
 
     def _reset_zoom_state(self):
         self.zoom_rel = 1.0
+        self._zoom_actual = False
         self.view_center = None
         self._pan_last = None
         self.zoom_slider.blockSignals(True)
@@ -3678,6 +3682,10 @@ class VideoPlayerWidget(QWidget):
         fit_scale = min(label_size.width() / frame_w, label_size.height() / frame_h)
         self._fit_scale = fit_scale
         if fit_scale > 0:
+            if self._zoom_actual:
+                # En 1:1 lo que se conserva es la escala (100%), no el
+                # multiplicador: al cambiar el tamaño del área se recalcula
+                self.zoom_rel = 1.0 / fit_scale
             lo, hi = self._zoom_limits()
             self.zoom_rel = max(lo, min(hi, self.zoom_rel))
             self._update_zoom_limits()

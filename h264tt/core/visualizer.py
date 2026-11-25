@@ -56,6 +56,20 @@ def create_yuv_from_mp4(
         return False
 
 
+
+def _is_mb_column_header(tokens, first_line):
+    """¿Es esta línea solo numérica la cabecera de columnas de FFmpeg >= 7?
+
+    La cabecera es "0 64 128 ..." (o "0 128 256 ..." en vídeos de más de 999
+    píxeles de ancho). Las filas del formato numérico antiguo solo tienen 0, 1
+    y 2, así que cualquier otro valor delata la cabecera. El único caso que se
+    confunde es "0" a secas (vídeos de hasta 64 píxeles de ancho): se toma como
+    cabecera solo si es la primera línea tras "New frame".
+    """
+    if any(t not in ("0", "1", "2") for t in tokens):
+        return True
+    return first_line and tokens == ["0"]
+
 class MBVisualizer:
     def __init__(
         self,
@@ -821,6 +835,7 @@ class MBVisualizer:
         frames_data = []
         current_frame_data = {"type": None, "tokens": []}
         regex_prefix = re.compile(r"^\[.*?\]\s*")
+        header_pending = False  # la próxima línea candidata puede ser la cabecera
 
         with open(self.log_file, "r", encoding="utf-8", errors="ignore") as f:
             for line in f:
@@ -838,6 +853,7 @@ class MBVisualizer:
                         current_frame_data = {"type": None, "tokens": []}
 
                     if "New frame" in clean:
+                        header_pending = True
                         type_match = re.search(r"type:\s*([IPB])", clean, re.IGNORECASE)
                         if type_match:
                             frame_type = type_match.group(1).upper()
@@ -863,18 +879,17 @@ class MBVisualizer:
                     continue
 
                 tokens = clean.split()
+                first_line, header_pending = header_pending, False
 
-                # FFmpeg >= 7.0 imprime, tras "New frame", una cabecera de
-                # columnas ("0  64 128 ...", solo números) y antepone a cada fila
-                # su coordenada y ("16 i  i  I ..."). FFmpeg 6.x no lo hace.
-                # Misma regla que el analizador de la interfaz: una línea solo
-                # numérica con algún valor fuera de 0/1/2 es la cabecera; si solo
-                # tiene 0/1/2 es una fila del formato numérico antiguo y se
-                # conserva. Una fila con letras que empieza por un número lleva
-                # etiqueta de fila, que se descarta.
+                # FFmpeg >= 7.0 imprime, justo tras "New frame", una cabecera de
+                # columnas ("0  64 128 ...": la x de cada 4 u 8 macrobloques) y
+                # antepone a cada fila su coordenada y ("16 i  i  I ..."). FFmpeg
+                # 6.x no lo hace. Misma regla que el analizador de la interfaz
+                # (ver _is_mb_column_header).
                 if tokens and all(t.isdigit() for t in tokens):
-                    if any(t not in ("0", "1", "2") for t in tokens):
+                    if _is_mb_column_header(tokens, first_line):
                         continue  # cabecera de columnas
+                    # si no, fila del formato numérico antiguo (0/1/2): se conserva
                 elif tokens and tokens[0].isdigit():
                     tokens = tokens[1:]  # etiqueta de fila (coordenada y)
                     clean = " ".join(tokens)

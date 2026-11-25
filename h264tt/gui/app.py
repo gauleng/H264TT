@@ -90,7 +90,7 @@ try:
         QActionGroup,
     )
     from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
-    from PyQt5.QtGui import QFont, QPixmap, QIcon, QImage, QResizeEvent
+    from PyQt5.QtGui import QFont, QPixmap, QIcon, QImage, QResizeEvent, QPalette
 
     HAS_GUI = True
 except ImportError as e:
@@ -132,6 +132,49 @@ except ImportError as e:
 
     class QTimer(_QtPlaceholder):  # type: ignore[no-redef]
         pass
+
+
+def _is_dark_theme():
+    """True si la paleta del sistema/aplicación es oscura."""
+    app = QApplication.instance()
+    if app is None:
+        return False
+    return app.palette().color(QPalette.Window).lightness() < 128
+
+
+# Colores de las superficies y del texto resaltado. El tema claro conserva los
+# valores originales; en tema oscuro se usan roles de la paleta (palette(...)),
+# de modo que fondos y texto se adaptan al tema del sistema y no quedan blancos
+# sobre fondos claros fijos.
+_LIGHT_THEME = {
+    "group_border": "#d6dbe3", "group_bg": "#ffffff", "group_title": "#2b2f36",
+    "btn_border": "#cfd6e4", "btn_bg": "#f7f9fc", "btn_hover": "#eaf2ff",
+    "handle": "#dde3ec", "handle_hover": "#b8c8e6",
+    "metric_fg": "#445", "metric_bg": "#eef4ff", "metric_border": "#d4e1ff",
+    "header_bg": "#eef3fb", "muted": "#556",
+    "video_bg": "#f0f0f0", "video_border": "#ccc",
+    "intra": "red", "skip": "green", "inter": "blue",
+    "frame_I": "red", "frame_P": "blue", "frame_B": "blueviolet", "neutral": "black",
+}
+_DARK_THEME = {
+    "group_border": "palette(mid)", "group_bg": "palette(window)",
+    "group_title": "palette(window-text)",
+    "btn_border": "palette(mid)", "btn_bg": "palette(button)",
+    "btn_hover": "palette(midlight)",
+    "handle": "palette(mid)", "handle_hover": "palette(highlight)",
+    "metric_fg": "palette(window-text)", "metric_bg": "palette(alternate-base)",
+    "metric_border": "palette(mid)",
+    "header_bg": "palette(button)", "muted": "#9aa4b2",
+    "video_bg": "palette(base)", "video_border": "palette(mid)",
+    "intra": "#ff6b6b", "skip": "#5fd35f", "inter": "#6ea8ff",
+    "frame_I": "#ff6b6b", "frame_P": "#6ea8ff", "frame_B": "#b388ff",
+    "neutral": "palette(window-text)",
+}
+
+
+def _theme():
+    """Colores a usar según el tema actual (claro u oscuro)."""
+    return _DARK_THEME if _is_dark_theme() else _LIGHT_THEME
 
 
 class EncodingWorker(QThread):
@@ -431,7 +474,7 @@ class MBVisualizerGUI(QMainWindow):
         header_btn.setCheckable(True)
         header_btn.setChecked(expanded)
         header_btn.setStyleSheet(
-            "QPushButton { text-align: left; font-weight: bold; padding: 8px 10px; background: #eef3fb; }"
+            f"QPushButton {{ text-align: left; font-weight: bold; padding: 8px 10px; background: {_theme()['header_bg']}; }}"
         )
         outer_layout.addWidget(header_btn)
 
@@ -1059,42 +1102,42 @@ class MBVisualizerGUI(QMainWindow):
             self.toggle_analysis_action.blockSignals(False)
 
     def apply_professional_styles(self):
-        self.setStyleSheet(
-            """
+        c = _theme()
+        css = """
             QWidget { font-size: 10pt; }
             QGroupBox {
-                border: 1px solid #d6dbe3;
+                border: 1px solid @group_border@;
                 border-radius: 8px;
                 margin-top: 14px;
                 padding-top: 10px;
-                background: #ffffff;
+                background: @group_bg@;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
                 left: 10px;
                 padding: 0 6px;
-                color: #2b2f36;
+                color: @group_title@;
                 font-weight: bold;
             }
             QPushButton {
                 padding: 6px 10px;
                 border-radius: 6px;
-                border: 1px solid #cfd6e4;
-                background: #f7f9fc;
+                border: 1px solid @btn_border@;
+                background: @btn_bg@;
             }
             QPushButton:hover {
-                background: #eaf2ff;
+                background: @btn_hover@;
             }
             QSplitter::handle {
-                background: #dde3ec;
+                background: @handle@;
             }
             QSplitter::handle:hover {
-                background: #b8c8e6;
+                background: @handle_hover@;
             }
             QLabel#quickMetrics, QLabel#quickFrameMetrics {
-                color: #445;
-                background: #eef4ff;
-                border: 1px solid #d4e1ff;
+                color: @metric_fg@;
+                background: @metric_bg@;
+                border: 1px solid @metric_border@;
                 border-radius: 6px;
                 padding: 6px 10px;
             }
@@ -1108,7 +1151,9 @@ class MBVisualizerGUI(QMainWindow):
                 font-weight: bold;
             }
             """
-        )
+        for key, value in c.items():
+            css = css.replace(f"@{key}@", value)
+        self.setStyleSheet(css)
         self.run_btn.setStyleSheet(
             "QPushButton { background-color: #0078D4; color: white; border: none; border-radius: 6px; padding: 12px; font-size: 14px; font-weight: bold; } QPushButton:hover { background-color: #106ebe; }"
         )
@@ -2318,7 +2363,8 @@ class VideoPlayerWidget(QWidget):
         self.video_label = QLabel(_("No video loaded"))
         self.video_label.setAlignment(Qt.AlignCenter)
         self.video_label.setStyleSheet(
-            "border: 2px solid #ccc; background-color: #f0f0f0;"
+            f"border: 2px solid {_theme()['video_border']}; "
+            f"background-color: {_theme()['video_bg']};"
         )
         self.video_label.setMinimumSize(640, 360)
         self.video_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -2502,7 +2548,7 @@ class VideoPlayerWidget(QWidget):
         self.intra_title_label = QLabel(_("INTRA (Rojo):"))
         intra_layout.addWidget(self.intra_title_label)
         self.intra_label = QLabel("-")
-        self.intra_label.setStyleSheet("color: red; font-weight: bold;")
+        self.intra_label.setStyleSheet(f"color: {_theme()['intra']}; font-weight: bold;")
         intra_layout.addWidget(self.intra_label)
         intra_layout.addStretch()
         self.mb_stats_layout.addLayout(intra_layout)
@@ -2512,7 +2558,7 @@ class VideoPlayerWidget(QWidget):
         self.skip_title_label = QLabel(_("SKIP (Verde):"))
         skip_layout.addWidget(self.skip_title_label)
         self.skip_label = QLabel("-")
-        self.skip_label.setStyleSheet("color: green; font-weight: bold;")
+        self.skip_label.setStyleSheet(f"color: {_theme()['skip']}; font-weight: bold;")
         skip_layout.addWidget(self.skip_label)
         skip_layout.addStretch()
         self.mb_stats_layout.addLayout(skip_layout)
@@ -2522,7 +2568,7 @@ class VideoPlayerWidget(QWidget):
         self.inter_title_label = QLabel(_("INTER (Azul):"))
         inter_layout.addWidget(self.inter_title_label)
         self.inter_label = QLabel("-")
-        self.inter_label.setStyleSheet("color: blue; font-weight: bold;")
+        self.inter_label.setStyleSheet(f"color: {_theme()['inter']}; font-weight: bold;")
         inter_layout.addWidget(self.inter_label)
         inter_layout.addStretch()
         self.mb_stats_layout.addLayout(inter_layout)
@@ -2560,7 +2606,7 @@ class VideoPlayerWidget(QWidget):
         header_btn.setCheckable(True)
         header_btn.setChecked(expanded)
         header_btn.setStyleSheet(
-            f"QPushButton {{ text-align: left; font-weight: bold; font-size: {header_font_size}px; padding: 8px 10px; background: #eef3fb; margin: 0; }}"
+            f"QPushButton {{ text-align: left; font-weight: bold; font-size: {header_font_size}px; padding: 8px 10px; background: {_theme()['header_bg']}; margin: 0; }}"
         )
         outer_layout.addWidget(header_btn)
 
@@ -2606,7 +2652,7 @@ class VideoPlayerWidget(QWidget):
             _("Símbolos basados en la salida de depuración de FFmpeg/libx264. Cada fila resume color, símbolo, nombre y una explicación breve del modo de codificación.")
         )
         self.legend_intro_label.setWordWrap(True)
-        self.legend_intro_label.setStyleSheet("color: #556; font-size: 9pt; margin-bottom: 6px;")
+        self.legend_intro_label.setStyleSheet(f"color: {_theme()['muted']}; font-size: 9pt; margin-bottom: 6px;")
         scroll_layout.addWidget(self.legend_intro_label)
 
         # Colores y símbolos de MB (BGR format como en OpenCV)
@@ -2764,7 +2810,7 @@ class VideoPlayerWidget(QWidget):
             self.frame_number_label.setText("-")
             self.frame_type_label.setText("-")
             self.frame_type_label.setStyleSheet(
-                "font-weight: bold; font-size: 26px; min-width: 34px; color: black;"
+                f"font-weight: bold; font-size: 26px; min-width: 34px; color: {_theme()['neutral']};"
             )
             self.frame_qp_label.setText("-")
             self.frame_size_label.setText("-")
@@ -2778,7 +2824,7 @@ class VideoPlayerWidget(QWidget):
             self.frame_number_label.setText("-")
             self.frame_type_label.setText("-")
             self.frame_type_label.setStyleSheet(
-                "font-weight: bold; font-size: 26px; min-width: 34px; color: black;"
+                f"font-weight: bold; font-size: 26px; min-width: 34px; color: {_theme()['neutral']};"
             )
             self.frame_qp_label.setText("-")
             self.frame_size_label.setText("-")
@@ -2794,8 +2840,13 @@ class VideoPlayerWidget(QWidget):
         frame_type = (
             self.frame_types[frame_num] if frame_num < len(self.frame_types) else "-"
         )
-        frame_type_colors = {"I": "red", "P": "blue", "B": "blueviolet"}
-        frame_type_color = frame_type_colors.get(frame_type, "black")
+        theme = _theme()
+        frame_type_colors = {
+            "I": theme["frame_I"],
+            "P": theme["frame_P"],
+            "B": theme["frame_B"],
+        }
+        frame_type_color = frame_type_colors.get(frame_type, theme["neutral"])
         self.frame_type_label.setText(frame_type)
         self.frame_type_label.setStyleSheet(
             f"font-weight: bold; font-size: 26px; min-width: 34px; color: {frame_type_color};"
